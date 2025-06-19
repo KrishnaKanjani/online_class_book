@@ -7,6 +7,7 @@ from app.middlewares.db import get_database
 from app.core.response_validation import custom_jsonable_encoder
 from bson import ObjectId
 from collections import defaultdict
+import logging
 
 router = APIRouter()
 
@@ -21,13 +22,15 @@ async def get_available_slots(
    """
    try:
       tomorrow = datetime.combine(datetime.now().date() + timedelta(days=1), time.min)
+      logging.info(f"Tomorrow's date: {tomorrow}")
       availabilities = await db.teacher_availabilities.find({"available_date": tomorrow}).to_list(100)
+      logging.info(f"Teacher availabilities: {availabilities}")
 
       if not availabilities:
          return {
-               "success": False,
-               "message": "No teacher availabilities found for tomorrow.",
-               "data": []
+            "success": False,
+            "message": "No teacher availabilities found for tomorrow.",
+            "teachers_available": []
          }
 
       teacher_map = defaultdict(lambda: {

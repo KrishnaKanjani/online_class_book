@@ -9,6 +9,7 @@ from app.core.response_validation import custom_jsonable_encoder
 from bson import ObjectId
 from datetime import timedelta, datetime, time
 from collections import defaultdict
+import logging
 
 router = APIRouter()
 
@@ -43,7 +44,6 @@ async def update_teacher_profile(
    updated["_id"] = str(updated["_id"])
    return User(**updated)
 
-
 @router.post("/availability", response_model=AvailabilityResponse)
 async def set_availability(
    data: TeacherAvailability,
@@ -51,14 +51,18 @@ async def set_availability(
    teacher: User = Depends(get_current_teacher)
 ):
    try:
+      logging.info(f"Received availability set request from teacher {teacher.id}: {data.dict()}")
+
       # Ensure teacher is setting their own availability
       if str(teacher.id) != data.teacher_id:
+         logging.warning(f"Unauthorized teacher ID used. Authenticated: {teacher.id}, Provided: {data.teacher_id}")
          raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized teacher ID")
 
-      # Normalize availability date to midnight datetime
+      # Normalize availability date
       availability_date = datetime.combine(data.available_date.date(), time.min)
+      logging.info(f"Normalized availability date: {availability_date}")
 
-      # Check if the teacher already has an overlapping availability for the same day
+      # Check for overlap with existing slots
       overlap_exists = await db.teacher_availabilities.find_one({
          "teacher_id": data.teacher_id,
          "available_date": availability_date,
@@ -69,29 +73,40 @@ async def set_availability(
             }
          ]
       })
+
       if overlap_exists:
+         logging.warning(f"Overlapping availability detected for teacher {data.teacher_id} on {availability_date}")
          raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Availability overlaps with an existing slot"
          )
 
-      # Prepare document with datetime normalization
+      # Prepare and insert availability document
       availability_doc = {
          **data.dict(),
          "available_date": availability_date,
       }
+
       result = await db.teacher_availabilities.insert_one(availability_doc)
-      return {"id": str(result.inserted_id), "success": True, "message": "Availability set successfully", "data": data.dict()}
-   
+      logging.info(f"Availability set successfully with ID: {str(result.inserted_id)} for teacher {data.teacher_id}")
+
+      return {
+         "id": str(result.inserted_id),
+         "success": True,
+         "message": "Availability set successfully",
+         "data": data.dict()
+      }
+
    except HTTPException as httpex:
+      logging.error(f"HTTPException during availability set: {httpex.detail}")
       raise httpex
-   
+
    except Exception as e:
+      logging.exception("Unhandled error while setting availability.")
       raise HTTPException(
-         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
          detail=f"Error setting availability: {str(e)}"
       )
-
 
 @router.get("/available_slots", response_model=Dict)
 async def get_my_available_slots(
@@ -194,24 +209,6 @@ async def view_my_student_registeration(
          })
 
       return result
-
-      # detailed = []
-      # for b in bookings:
-      #    student_info = student_map.get(b["student_id"])
-      #    if not student_info:
-      #       continue 
-
-      #    detailed.append({
-      #       "teacher_id": b["teacher_id"],
-      #       "student_id": b["student_id"],
-      #       "booking_date": b["booking_date"],
-      #       "subject": b["subject"],
-      #       "start_time": b["start_time"],
-      #       "end_time": b["end_time"],
-      #       "students": [student_info]
-      #    })
-
-      # return detailed
 
    except Exception as e:
       raise HTTPException(

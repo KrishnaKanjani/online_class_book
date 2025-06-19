@@ -8,6 +8,7 @@ from app.models.user import User, UserUpdate
 from app.middlewares.db import get_database
 from app.middlewares.auth import get_current_student
 from bson import ObjectId
+import logging
 
 router = APIRouter()
 
@@ -92,30 +93,33 @@ async def book_slot(
       - Student must not have already booked this same slot.
    """
    try:
+      logging.info(f"Booking request received: {request.dict()} by student: {student.id}")
       teacher_id = request.teacher_id
       slot_start = request.slot_start
-      # Parse slot start as datetime
+
       try:
          hour, minute = map(int, slot_start.split(":"))
+         logging.debug(f"Parsed slot time: hour={hour}, minute={minute}")
       except ValueError:
+         logging.error("Invalid time format received.")
          raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM")
 
-      # Compose full datetime objects for tomorrow's date and times
       tomorrow_date = datetime.now().date() + timedelta(days=1)
       slot_start_dt = datetime.combine(tomorrow_date, time(hour, minute))
       slot_end_dt = slot_start_dt + timedelta(hours=1)
       booking_date_dt = datetime.combine(tomorrow_date, time.min)
-      
-      # Fetch all availabilities for the teacher on the booking date
+
+      logging.info(f"Attempting to book for teacher {teacher_id} on {booking_date_dt} from {slot_start_dt} to {slot_end_dt}")
+
       availabilities = await db.teacher_availabilities.find({
          "teacher_id": teacher_id,
          "available_date": booking_date_dt
       }).to_list(length=10)
 
       if not availabilities:
+         logging.warning(f"No availability found for teacher {teacher_id} on {booking_date_dt}")
          raise HTTPException(status_code=404, detail="No availability found for this teacher.")
 
-      # Try to find a matching availability range
       matched_availability = None
       for availability in availabilities:
          if availability["start_time"] <= slot_start_dt < availability["end_time"]:
@@ -123,25 +127,29 @@ async def book_slot(
             break
 
       if not matched_availability:
+         logging.warning(f"Slot time {slot_start_dt} not within any availability for teacher {teacher_id}")
          raise HTTPException(status_code=400, detail="Time not within any of the teacher's available slots")
 
-      # Check how many students are already booked in this slot for this specific availability
+      logging.info(f"Matched availability found: {matched_availability}")
+
       existing_bookings = await db.class_bookings.find({
          "teacher_id": teacher_id,
          "booking_date": booking_date_dt,
          "start_time": slot_start_dt,
          "end_time": slot_end_dt,
-         "subject": matched_availability["subject"]  # Optional: helps ensure exact match
+         "subject": matched_availability["subject"]
       }).to_list(length=100)
 
       max_allowed = matched_availability.get("max_no_of_students_each_slot", 1)
+      logging.debug(f"Existing bookings: {len(existing_bookings)} / {max_allowed}")
+
       if len(existing_bookings) >= max_allowed:
+         logging.warning("Booking failed: slot already full.")
          raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Slot already full. Max {max_allowed} students allowed."
          )
-            
-      # Check if the student already booked this slot
+
       duplicate_booking = await db.class_bookings.find_one({
          "student_id": str(student.id),
          "teacher_id": teacher_id,
@@ -149,12 +157,12 @@ async def book_slot(
          "start_time": slot_start_dt
       })
       if duplicate_booking:
+         logging.warning(f"Duplicate booking attempt by student {student.id} for slot {slot_start_dt}")
          raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You have already booked this slot."
          )
 
-      # Create booking
       booking = Booking(
          student_id=str(student.id),
          teacher_id=teacher_id,
@@ -164,18 +172,25 @@ async def book_slot(
          end_time=slot_end_dt
       )
       result = await db.class_bookings.insert_one(booking.model_dump())
-      return {"success": True, "message": "Slot Booked successfully", **booking.model_dump(exclude=('_id')), "booking_id": str(result.inserted_id)}
+      logging.info(f"Booking successful: {str(result.inserted_id)}")
+      
+      return {
+         "success": True,
+         "message": "Slot Booked successfully",
+         **booking.model_dump(exclude=('_id')),
+         "booking_id": str(result.inserted_id)
+      }
 
    except HTTPException as httpex:
+      logging.error(f"HTTPException during booking: {httpex.detail}")
       raise httpex
-   
+
    except Exception as e:
+      logging.exception("Unhandled exception occurred while booking.")
       raise HTTPException(
          status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
          detail=f"Error booking this slot: {str(e)}"
       )
-
-
 @router.post("/slot/pay", status_code=200)
 async def mark_slot_booking_paid(
    booking_id: str = Query(..., example="60f7f72b9e1d8e6b2c5d6e3d"),
