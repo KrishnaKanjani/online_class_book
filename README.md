@@ -92,24 +92,6 @@ The system comes with pre-populated data once you execute the script "scripts/se
 
 > Default Password for all **student** accounts: `school@123`
 
-## Testing
-
-Run the test suite:
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app
-
-# Run specific test file
-pytest tests/test_auth.py -v
-
-# Generate HTML Coverage Report
-pytest --cov=app --cov-report=html
---- then open start htmlcov/index.html(WINDOWS), open htmlcov/index.html(macOS)
-```
-
 ## MongoDB Collections
 
 - `users`: User accounts (students and teachers)

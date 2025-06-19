@@ -38,7 +38,11 @@ app.include_router(students.router, prefix="/student", tags=["Students"])
 
 @app.get("/")
 async def root():
-   return {"message": "Welcome to Online Class Booking API"}
+   return {"message": "Welcome to Online Class Booking API. Please go to /docs to get the API list"}
+
+@app.get("/health")
+async def root():
+   return {"message": "Application status healthy"}
 
 
 def custom_openapi():
