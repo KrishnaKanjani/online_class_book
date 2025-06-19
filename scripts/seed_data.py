@@ -3,12 +3,13 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
 from app.core.config import authorization_utils
 from datetime import datetime, timedelta, time
-from bson import ObjectId
+import random
 
 client = AsyncIOMotorClient(settings.MONGO_URI)
 db = client[settings.DB_NAME]
 
 async def seed():
+   # CLEAR PREVIOUS DATA FOR FRESH TESTING (ONLY FOR DEVELOPMENT)
    await db.users.delete_many({})
    await db.teacher_availabilities.delete_many({})
    await db.class_bookings.delete_many({})
@@ -16,7 +17,7 @@ async def seed():
    print("✅ Cleared previous data.")
 
    # Hash the default password
-   hashed_pwd = authorization_utils.get_password_hash("school@123")
+   hashed_teacher_pwd = authorization_utils.get_password_hash("education@123")
 
    # 1. Add Teachers
    teachers = [
@@ -28,8 +29,9 @@ async def seed():
          "age": 35,
          "role": "teacher",
          "subject": "Mathematics",
+         "years_of_exp": 1,
          "is_active": True,
-         "hashed_password": hashed_pwd,
+         "hashed_password": hashed_teacher_pwd,
          "created_at": datetime.now(),
          "updated_at": datetime.now()
       },
@@ -41,8 +43,9 @@ async def seed():
          "age": 40,
          "role": "teacher",
          "subject": "English",
+         "years_of_exp": 4,
          "is_active": True,
-         "hashed_password": hashed_pwd,
+         "hashed_password": hashed_teacher_pwd,
          "created_at": datetime.now(),
          "updated_at": datetime.now()
       },
@@ -54,8 +57,9 @@ async def seed():
          "age": 42,
          "role": "teacher",
          "subject": "Chemistry",
+         "years_of_exp": 2.5,
          "is_active": True,
-         "hashed_password": hashed_pwd,
+         "hashed_password": hashed_teacher_pwd,
          "created_at": datetime.now(),
          "updated_at": datetime.now()
       }
@@ -67,6 +71,8 @@ async def seed():
    print(f"✅ Inserted {len(teacher_ids)} teachers.")
 
    # 2. Add Students
+   hashed_student_pwd = authorization_utils.get_password_hash("school@123")
+
    students = []
    for i in range(15):
       students.append({
@@ -76,8 +82,11 @@ async def seed():
          "phone": f"+9199000000{i+1:02}",
          "age": 18 + i % 5,
          "role": "student",
+         "school_name": f"""School {random.choice(["ABC", "XYZ", "PQR", "KLM", "DEF", "OPQ", "WXY"])}""",
+         "standard": random.choice(["4rd", "5th", "6th", "7th", "8th"]),
+         "previuos_standard_result": random.randint(70, 97),
          "is_active": True,
-         "hashed_password": hashed_pwd,
+         "hashed_password": hashed_student_pwd,
          "created_at": datetime.now(),
          "updated_at": datetime.now()
       })
@@ -91,13 +100,14 @@ async def seed():
 
    for i, teacher_id in enumerate(teacher_ids):
       start_time = time(10 + i, 0)  # 10:00 AM, 11:00 AM, 12:00 PM
-      end_time = time(17, 0)        # Till 5:00 PM
+      end_time = time(12 + i, 0)        # Till 6:00 PM
       availabilities.append({
          "teacher_id": str(teacher_id),
          "subject": teachers[i]["subject"],
          "available_date": tomorrow,
          "start_time": start_time,
-         "end_time": end_time
+         "end_time": end_time,
+         "max_no_of_students_each_slot": random.randint(2, 5)
       })
 
    availabilities = [
@@ -122,12 +132,15 @@ async def seed():
          "subject": teachers[i]["subject"],
          "booking_date": tomorrow,
          "start_time": time(10, 0),
-         "end_time": time(11, 0)
+         "end_time": time(11, 0),
+         "booked_at": datetime.now(),
+         "fees_paid": random.choice([True, False])
       })
 
    bookings = [
       {
          **doc,
+         "payment_timestamp": datetime.now() if doc["fees_paid"] is True else None,
          "booking_date": datetime.combine(doc["booking_date"], time.min),
          "start_time": datetime.combine(doc["booking_date"], doc["start_time"]),
          "end_time": datetime.combine(doc["booking_date"], doc["end_time"]),

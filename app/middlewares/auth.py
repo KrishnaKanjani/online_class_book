@@ -32,19 +32,11 @@ invalid_creds_exception = HTTPException(
 )
 
 async def check_if_user_is_registered(
-      # credentials: HTTPAuthorizationCredentials = Depends(security),
       email: str,
       db: AsyncIOMotorDatabase = Depends(get_database)
    ) -> bool:
 
-   # token = credentials.credentials
    try:
-      # token_data = jwt_utils.decode_token(token)
-
-      # if "user_id" in token_data:
-      #    raise already_registered_exception
-      
-      # token_data = TokenData(**token_data)
       user = await db.users.find_one({"email": email})
       if user is not None:
          raise already_registered_exception
@@ -72,15 +64,15 @@ async def get_current_user(
    user_data = await db.users.find_one({"_id": ObjectId(user_id)})
    if not user_data:
       raise credentials_exception
-
+   user_data["_id"] = str(user_data["_id"])
    return User(**user_data)
 
 async def get_current_teacher(user: User = Depends(get_current_user)) -> User:
-   if user.role.value != "teacher":
+   if user.role != "teacher":
       raise HTTPException(status_code=403, detail="Only teachers allowed")
    return user
 
 async def get_current_student(user: User = Depends(get_current_user)) -> User:
-   if user.role.value != "student":
+   if user.role != "student":
       raise HTTPException(status_code=403, detail="Only students allowed")
    return user

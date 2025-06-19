@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any
 
 import jwt
+import re
 from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
@@ -41,7 +42,7 @@ class JWTUtils:
          The encoded JWT token string
       """
       to_encode = data.copy()
-      expire = datetime.utcnow() + timedelta(
+      expire = datetime.now() + timedelta(
          minutes=self.config.access_token_expire_minutes
       )
       to_encode.update({"exp": expire, "type": "access"})
@@ -61,7 +62,7 @@ class JWTUtils:
          The encoded JWT refresh token string
       """
       to_encode = data.copy()
-      expire = datetime.utcnow() + timedelta(
+      expire = datetime.now() + timedelta(
          minutes=self.config.refresh_token_expire_minutes
       )
       to_encode.update({"exp": expire, "type": "refresh"})
@@ -132,4 +133,46 @@ class AuthorizationUtils:
    def get_password_hash(self, password):
       return self.pwd_context.hash(password)
 
+   def validate_password_strength(self, password):
+      """
+         Validates that the password meets required complexity:
+         - At least 4 letters, with at least 1 uppercase letter
+         - At least 2 digits
+         - At least 1 special character
+         Raises HTTPException if validation fails.
+      """
+      if len(password) < 8:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
+         )
 
+      # Count letters
+      letters = re.findall(r'[A-Za-z]', password)
+      uppercase = re.findall(r'[A-Z]', password)
+      digits = re.findall(r'\d', password)
+      special = re.findall(r'[^A-Za-z0-9]', password)
+
+      if len(letters) < 4:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least 4 letters"
+         )
+
+      if len(uppercase) < 1:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must include at least 1 uppercase letter"
+         )
+
+      if len(digits) < 2:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least 2 digits"
+         )
+
+      if len(special) < 1:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must contain at least 1 special character"
+         )

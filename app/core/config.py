@@ -18,6 +18,7 @@ def get_settings():
    return Settings()
 
 settings = get_settings()
+
 jwt_utils = JWTUtils(config=JWTConfig(
    secret_key=settings.SECRET_KEY,
    algorithm=settings.ALGORITHM,
@@ -25,3 +26,6 @@ jwt_utils = JWTUtils(config=JWTConfig(
    refresh_token_expire_minutes=settings.REFRESH_ACCESS_TOKEN_EXPIRE_MINUTES
 ))
 authorization_utils = AuthorizationUtils()
+cors_origins = [
+   # Lsit of frontend urls to give access to
+]
